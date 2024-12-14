@@ -13,6 +13,13 @@ def createHistPrices(start_date = '2000-01-01', end_date = '2024-05-01'):
     
     # Download historical prices for the list of tickers
     historical_prices = yf.download(sp500_tickers, start=start_date, end=end_date)
+
+    # Added Price and Ticker in the First column:
+    new_cols = historical_prices.columns
+    historical_prices.columns = pd.MultiIndex.from_tuples(new_cols)
+
+    # Rename the levels so top is 'Price', bottom is 'Ticker'
+    historical_prices.columns = historical_prices.columns.set_names(["Price", "Ticker"])
     
     # Filter and keep only columns where the first level of the MultiIndex is 'Adj Close'
     historical_prices  = historical_prices.loc[:, historical_prices.columns.get_level_values(0) == 'Adj Close']
