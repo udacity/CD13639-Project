@@ -3,16 +3,19 @@ import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import requests
 
-def createHistPrices(start_date = '2000-01-01', end_date = '2024-05-01'):    
+def create_hist_prices(start_date = '2000-01-01', end_date = '2024-05-01'):  
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies', headers=headers)
     # Define the list of tickers
-    sp500_tickers = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')[0]['Symbol'].tolist()
+    sp500_tickers = pd.read_html(response.text)[0]['Symbol'].tolist()
     
     # Filter out Class B shares that have a '.B' in the ticker name
     sp500_tickers = [ticker for ticker in sp500_tickers if '.B' not in ticker]
     
     # Download historical prices for the list of tickers
-    historical_prices = yf.download(sp500_tickers, start=start_date, end=end_date)
+    historical_prices = yf.download(sp500_tickers, start=start_date, end=end_date, auto_adjust=False)
     
     # Filter and keep only columns where the first level of the MultiIndex is 'Adj Close'
     historical_prices  = historical_prices.loc[:, historical_prices.columns.get_level_values(0) == 'Adj Close']
@@ -36,8 +39,8 @@ def createHistPrices(start_date = '2000-01-01', end_date = '2024-05-01'):
 
 
 
-# Create a function called 'computingReturns' that takes prices and a list of integers (momentums) as an inputs
-def computingReturns(historical_prices, list_of_momentums): 
+# Create a function called 'compute_returns' that takes prices and a list of integers (momentums) as an inputs
+def compute_returns(historical_prices, list_of_momentums): 
     # Initialize the forecast horizon
     forecast_horizon = 1
     # Compute forward returns by taking percentage change of close prices
@@ -180,18 +183,26 @@ def compute_strat_perf(total_returns, cum_returns, calendar_returns, trading_str
     calendar_returns.plot.bar(rot=30,  legend='top_left')#.opts(multi_level=False) 
     return cum_returns, calendar_returns
 
-def calculate_rsi(returns, window=14):    
-    gain = returns[returns>0].dropna().rolling(window=window).mean()
-    gain.name = 'gain'
-    loss = returns[returns<0].dropna().rolling(window=window).mean()
-    loss.name = 'loss'
-    returns = pd.merge(returns, gain, left_index=True, right_index=True, how='left')
-    returns = pd.merge(returns, loss, left_index=True, right_index=True, how='left')
-    returns = returns.ffill()
-    returns.dropna(inplace=True)
-    ratio = returns['gain']/abs(returns['loss'])
-    rsi = 100 - (100 / (1 + ratio))
-    return rsi
+def calculate_rsi(returns, window=14):
+    """Compute the Relative Strength Index (RSI).
+
+    Args:
+        returns: Series of price changes or percentage returns.
+        window: Look-back period for the RSI (default 14).
+
+    Returns:
+        Series of RSI values aligned with `returns`.
+    """
+    gain = returns.clip(lower=0)
+    loss = -returns.clip(upper=0)
+
+    avg_gain = gain.rolling(window=window, min_periods=window).mean()
+    avg_loss = loss.rolling(window=window, min_periods=window).mean()
+
+    # The replace() function below avoids division by zero
+    rs = avg_gain / avg_loss.replace(0, np.nan) 
+    rsi = 100 - (100 / (1 + rs))
+    return rsi.dropna()
 
 
 # Function to find the elbow point
